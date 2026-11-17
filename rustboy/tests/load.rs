@@ -46,8 +46,7 @@ use rustboy::{Cpu, LAST_THREE_BITS_MASK, Memory, Reg, reg_from_bits};
 #[test]
 fn ld_rd_rs_works() {
     let start = Cpu {
-        pc: 0,
-        sp: 0,
+        pc: 0, sp: 0,
         a: 1,
         b: 2,
         c: 3,

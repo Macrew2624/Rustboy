@@ -3,20 +3,13 @@
     Verify it functions how it's supposed to.
     Veirfy it doesn't tamper with anything else.
     Functions to test:
-    Cpu
-        set_flag
-        fetch_byte
-        load_immediate, load_reg
-        add_to_reg, inc_reg, dec_reg
-        inc_value, dec_value
-    Memory
-        new
-        read_byte, write_byte
     Free function
         reg_from_bits
 */
 
-use rustboy::{CARRY_FLAG_MASK, Cpu, HALFCARRY_FLAG_MASK, Reg, SUBTRACT_FLAG_MASK, ZERO_FLAG_MASK};
+use rustboy::{
+    CARRY_FLAG_MASK, Cpu, HALFCARRY_FLAG_MASK, Memory, Reg, SUBTRACT_FLAG_MASK, ZERO_FLAG_MASK,
+};
 
 #[test]
 fn cpu_new() {
@@ -40,6 +33,7 @@ fn cpu_new() {
 fn cpu_zero_flag() {
     let mut cpu = Cpu::new();
 
+    cpu.f = 0x0F;
     assert!(!cpu.zero_flag());
     assert!(!cpu.carry_flag());
     assert!(!cpu.halfcarry_flag());
@@ -56,6 +50,7 @@ fn cpu_zero_flag() {
 fn cpu_carry_flag() {
     let mut cpu = Cpu::new();
 
+    cpu.f = 0x0F;
     assert!(!cpu.zero_flag());
     assert!(!cpu.carry_flag());
     assert!(!cpu.halfcarry_flag());
@@ -72,6 +67,7 @@ fn cpu_carry_flag() {
 fn cpu_halfcarry_flag() {
     let mut cpu = Cpu::new();
 
+    cpu.f = 0x0F;
     assert!(!cpu.zero_flag());
     assert!(!cpu.carry_flag());
     assert!(!cpu.halfcarry_flag());
@@ -88,6 +84,7 @@ fn cpu_halfcarry_flag() {
 fn cpu_subtract_flag() {
     let mut cpu = Cpu::new();
 
+    cpu.f = 0x0F;
     assert!(!cpu.zero_flag());
     assert!(!cpu.carry_flag());
     assert!(!cpu.halfcarry_flag());
@@ -231,7 +228,7 @@ fn cpu_set_flag() {
         e: 5,
         h: 6,
         l: 7,
-        f: 0,
+        f: 0x0F,
         halted: false,
         stopped: false,
     };
@@ -240,26 +237,272 @@ fn cpu_set_flag() {
     let mut expected = start.clone();
 
     cpu.set_flag(true, ZERO_FLAG_MASK);
-    expected.f = 0x80;
+    expected.f = 0x8F;
 
     assert!(cpu.zero_flag());
+    assert!(!cpu.subtract_flag());
+    assert!(!cpu.halfcarry_flag());
+    assert!(!cpu.carry_flag());
     assert!(cpu == expected);
 
     cpu.set_flag(true, SUBTRACT_FLAG_MASK);
-    expected.f += 0x40;
+    expected.f = 0xCF;
 
+    assert!(cpu.zero_flag());
     assert!(cpu.subtract_flag());
+    assert!(!cpu.halfcarry_flag());
+    assert!(!cpu.carry_flag());
     assert!(cpu == expected);
 
     cpu.set_flag(true, HALFCARRY_FLAG_MASK);
-    expected.f += 0x20;
+    expected.f = 0xEF;
 
+    assert!(cpu.zero_flag());
     assert!(cpu.halfcarry_flag());
+    assert!(cpu.subtract_flag());
+    assert!(!cpu.carry_flag());
     assert!(cpu == expected);
 
     cpu.set_flag(true, CARRY_FLAG_MASK);
-    expected.f += 0x10;
+    expected.f = 0xFF;
 
+    assert!(cpu.zero_flag());
+    assert!(cpu.subtract_flag());
+    assert!(cpu.halfcarry_flag());
     assert!(cpu.carry_flag());
     assert!(cpu == expected);
+
+    cpu.set_flag(true, 0xF0);
+    assert!(cpu.zero_flag());
+    assert!(cpu.subtract_flag());
+    assert!(cpu.halfcarry_flag());
+    assert!(cpu.carry_flag());
+    assert!(cpu == expected);
+
+    cpu.set_flag(false, CARRY_FLAG_MASK);
+    expected.f = 0xEF;
+
+    assert!(cpu.zero_flag());
+    assert!(cpu.subtract_flag());
+    assert!(cpu.halfcarry_flag());
+    assert!(!cpu.carry_flag());
+    assert!(cpu == expected);
+
+    cpu.set_flag(false, HALFCARRY_FLAG_MASK);
+    expected.f = 0xCF;
+
+    assert!(cpu.zero_flag());
+    assert!(cpu.subtract_flag());
+    assert!(!cpu.halfcarry_flag());
+    assert!(!cpu.carry_flag());
+    assert!(cpu == expected);
+
+    cpu.set_flag(false, SUBTRACT_FLAG_MASK);
+    expected.f = 0x8F;
+
+    assert!(cpu.zero_flag());
+    assert!(!cpu.subtract_flag());
+    assert!(!cpu.halfcarry_flag());
+    assert!(!cpu.carry_flag());
+    assert!(cpu == expected);
+
+    cpu.set_flag(false, ZERO_FLAG_MASK);
+    expected.f = 0x0F;
+
+    assert!(!cpu.zero_flag());
+    assert!(!cpu.subtract_flag());
+    assert!(!cpu.halfcarry_flag());
+    assert!(!cpu.carry_flag());
+    assert!(cpu == expected);
+
+    cpu.set_flag(false, 0xF0);
+    expected.f = 0x0F;
+
+    assert!(!cpu.zero_flag());
+    assert!(!cpu.subtract_flag());
+    assert!(!cpu.halfcarry_flag());
+    assert!(!cpu.carry_flag());
+    assert!(cpu == expected);
+}
+
+#[test]
+fn cpu_fetch_byte() {
+    let start = Cpu {
+        pc: 0,
+        sp: 66,
+        a: 1,
+        b: 2,
+        c: 3,
+        d: 4,
+        e: 5,
+        h: 6,
+        l: 7,
+        f: 8,
+        halted: false,
+        stopped: false,
+    };
+
+    let mut cpu = start.clone();
+    let mut expected = start.clone();
+    let mut memory = Memory::new();
+
+    assert_eq!(cpu.pc, 0);
+
+    memory.write_byte(0, 1);
+    memory.write_byte(1, 2);
+    memory.write_byte(2, 3);
+
+    expected.pc += 1;
+    assert_eq!(cpu.fetch_byte(&memory), 1);
+    assert_eq!(cpu.pc, 1);
+    assert!(expected == cpu);
+
+    expected.pc += 1;
+    assert_eq!(cpu.fetch_byte(&memory), 2);
+    assert_eq!(cpu.pc, 2);
+    assert!(expected == cpu);
+
+    expected.pc += 1;
+    assert_eq!(cpu.fetch_byte(&memory), 3);
+    assert_eq!(cpu.pc, 3);
+    assert!(expected == cpu);
+
+    cpu.pc = 0x1234;
+    expected.pc = 0x1234;
+
+    expected.pc += 1;
+    memory.write_byte(0x1234, 4);
+    assert_eq!(cpu.fetch_byte(&memory), 4);
+    assert_eq!(cpu.pc, 0x1235);
+    assert!(expected == cpu);
+
+    cpu.pc = 0xFFFF;
+    expected.pc = 0xFFFF;
+
+    memory.write_byte(0xFFFF, 67);
+
+    expected.pc = 0;
+    assert_eq!(cpu.fetch_byte(&memory), 67);
+    assert_eq!(cpu.pc, 0);
+    assert!(expected == cpu);
+}
+
+#[test]
+fn cpu_load_immediate() {
+    let start = Cpu {
+        pc: 0,
+        sp: 66,
+        a: 11,
+        b: 12,
+        c: 13,
+        d: 14,
+        e: 15,
+        h: 16,
+        l: 17,
+        f: 0xF0,
+        halted: false,
+        stopped: false,
+    };
+    let mut memory = Memory::new();
+
+    const ALL_REGS: [Reg; 7] = [Reg::A, Reg::B, Reg::C, Reg::D, Reg::E, Reg::H, Reg::L];
+
+    let mut failed = Vec::new();
+    for (i, reg) in ALL_REGS.into_iter().enumerate() {
+        let mut expected = start.clone();
+        let mut cpu = start.clone();
+
+        memory.write_byte(0, i as u8 + 1);
+        cpu.load_immediate(reg, &memory);
+        assert!(cpu.pc == 1);
+        expected.pc += 1;
+
+        match reg {
+            Reg::A => expected.a = 1,
+            Reg::B => expected.b = 2,
+            Reg::C => expected.c = 3,
+            Reg::D => expected.d = 4,
+            Reg::E => expected.e = 5,
+            Reg::H => expected.h = 6,
+            Reg::L => expected.l = 7,
+        }
+
+        if cpu != expected {
+            failed.push(reg);
+        }
+    }
+
+    assert!(failed.is_empty(), "failed registers: {:?}", failed);
+}
+
+#[test]
+fn cpu_load_reg() {
+    let start = Cpu {
+        pc: 0,
+        sp: 66,
+        a: 11,
+        b: 12,
+        c: 13,
+        d: 14,
+        e: 15,
+        h: 16,
+        l: 17,
+        f: 0xF0,
+        halted: false,
+        stopped: false,
+    };
+
+    const ALL_REGS: [Reg; 7] = [Reg::A, Reg::B, Reg::C, Reg::D, Reg::E, Reg::H, Reg::L];
+
+    let mut failed = Vec::new();
+    for reg1 in ALL_REGS {
+        for reg2 in ALL_REGS {
+            let mut cpu = start.clone();
+            let mut expected = start.clone();
+
+            cpu.load_reg(reg1, reg2);
+
+            let value = expected.get_reg(reg2);
+            expected.set_reg(reg1, value);
+
+            if cpu != expected {
+                failed.push((reg1, reg2));
+            }
+        }
+    }
+    assert!(failed.is_empty(), "failed registers: {:?}", failed);
+}
+
+#[test]
+fn reg_from_bits() {}
+
+#[test]
+fn memory_new() {
+    let memory = Memory::new();
+
+    assert_eq!(memory.ram.len(), u16::MAX as usize + 1);
+    for val in &memory.ram {
+        assert_eq!(*val, 0);
+    }
+}
+
+#[test]
+fn memory_read_write_byte() {
+    let mut memory = Memory::new();
+
+    for i in 0..memory.ram.len() {
+        let mut value = (i as u8).wrapping_add(1) ^ ((i >> 8) as u8);
+        if value == 0 {
+            value = 1;
+        }
+        memory.write_byte(i as u16, value);
+    }
+
+    for i in 0..memory.ram.len() {
+        let mut value = (i as u8).wrapping_add(1) ^ ((i >> 8) as u8);
+        if value == 0 {
+            value = 1;
+        }
+        assert_eq!(memory.read_byte(i as u16), value);
+    }
 }

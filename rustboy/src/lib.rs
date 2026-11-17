@@ -115,7 +115,7 @@ impl Cpu {
 
     pub fn fetch_byte(&mut self, memory: &Memory) -> u8 {
         let fetched = memory.read_byte(self.pc);
-        self.pc += 1;
+        self.pc = self.pc.wrapping_add(1);
         fetched
     }
     pub fn load_immediate(&mut self, reg: Reg, memory: &Memory) {
