@@ -1,5 +1,4 @@
-use std::cell::Ref;
-
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Cpu {
     pub pc: u16, // program counter (PC)
     pub sp: u16, // stack pointer (SP)
@@ -12,6 +11,7 @@ pub struct Cpu {
     pub l: u8,
     pub f: u8, // FLAGS: Z - zero, N - subtract, H - half-carry, C - carry, 4 unused bits.
     pub halted: bool, // determines if the cpu is halted. wakes on interrupt
+    pub stopped: bool, // determines if the cpu is stopped. wakes on input
 }
 
 pub const ZERO_FLAG_MASK: u8 = 0b10000000;
@@ -20,7 +20,7 @@ pub const HALFCARRY_FLAG_MASK: u8 = 0b00100000;
 pub const CARRY_FLAG_MASK: u8 = 0b00010000;
 pub const LAST_THREE_BITS_MASK: u8 = 0b00000111;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum Reg {
     A,
     B,
@@ -58,6 +58,7 @@ impl Cpu {
             l: 0,
             f: 0,
             halted: false,
+            stopped: false,
         }
     }
 
@@ -125,7 +126,7 @@ impl Cpu {
         self.set_reg(dest, self.get_reg(src));
     }
 
-    fn add_to_reg(&mut self, reg: Reg, operand: u8) {
+    pub fn add_to_reg(&mut self, reg: Reg, operand: u8) {
         let register = self.get_reg(reg);
         let (result, did_overflow) = register.overflowing_add(operand);
 
@@ -137,18 +138,18 @@ impl Cpu {
         self.set_flag(result == 0, ZERO_FLAG_MASK);
         self.set_flag(false, SUBTRACT_FLAG_MASK);
     }
-    fn inc_reg(&mut self, reg: Reg) {
+    pub fn inc_reg(&mut self, reg: Reg) {
         let register = self.get_reg(reg);
         let result = self.inc_value(register);
         self.set_reg(reg, result);
     }
-    fn dec_reg(&mut self, reg: Reg) {
+    pub fn dec_reg(&mut self, reg: Reg) {
         let register = self.get_reg(reg);
         let result = self.dec_value(register);
         self.set_reg(reg, result);
     }
 
-    fn inc_value(&mut self, value: u8) -> u8 {
+    pub fn inc_value(&mut self, value: u8) -> u8 {
         let (result, _) = value.overflowing_add(1);
 
         let half_carry_check = (value & 0x0F) + 1;
@@ -159,7 +160,7 @@ impl Cpu {
 
         return result;
     }
-    fn dec_value(&mut self, value: u8) -> u8 {
+    pub fn dec_value(&mut self, value: u8) -> u8 {
         let (result, _) = value.overflowing_sub(1);
 
         self.set_flag(value & 0x0F == 0, HALFCARRY_FLAG_MASK);
@@ -171,7 +172,15 @@ impl Cpu {
     }
 
     pub fn step(&mut self, memory: &mut Memory) -> Result<(), String> {
-        if self.halted {
+        let interrupt_flag = memory.read_byte(0xFF0F);
+        let interrupt_enable = memory.read_byte(0xFFFF);
+        if (interrupt_enable & interrupt_flag) & 0b00011111 != 0 {
+            self.halted = false;
+        }
+        if (interrupt_enable & interrupt_flag) & 0b00010000 != 0 {
+            self.stopped = false;
+        }
+        if self.halted || self.stopped {
             return Ok(());
         }
         let instruction_start = self.pc;
@@ -199,13 +208,14 @@ impl Cpu {
                 Ok(())
             }
             0x04..=0x3C if (opcode & LAST_THREE_BITS_MASK == 0b100) => {
-                //INC r - increase register r's value by 1 without modifying the carry flag
+                // INC r - increase register r's value by 1 without modifying the carry flag
                 let destination_reg = reg_from_bits((opcode >> 3) & LAST_THREE_BITS_MASK)
                     .map_err(|e| format!("{} Instruction start: {:#06x}.", e, instruction_start))?;
                 self.inc_reg(destination_reg);
                 Ok(())
             }
             0x05..=0x3D if (opcode & LAST_THREE_BITS_MASK == 0b101) => {
+                // DEC r
                 let destination_reg = reg_from_bits((opcode >> 3) & LAST_THREE_BITS_MASK)
                     .map_err(|e| format!("{} Instruction start: {:#06x}.", e, instruction_start))?;
                 self.dec_reg(destination_reg);
@@ -216,6 +226,12 @@ impl Cpu {
                 let destination_reg = reg_from_bits((opcode >> 3) & LAST_THREE_BITS_MASK)
                     .map_err(|e| format!("{} Instruction start: {:#06x}.", e, instruction_start))?;
                 self.load_immediate(destination_reg, memory);
+                Ok(())
+            }
+            0x10 => {
+                // STOP
+                self.stopped = true;
+                self.fetch_byte(memory);
                 Ok(())
             }
             0x76 => {
@@ -272,6 +288,7 @@ impl Cpu {
     }
 }
 
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Memory {
     pub ram: [u8; 1 << 16],
 }

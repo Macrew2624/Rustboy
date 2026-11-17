@@ -425,3 +425,149 @@ fn inc_correctly_sets_flags() {
     assert!(!cpu.zero_flag());
     assert!(cpu.carry_flag());
 }
+
+#[test]
+fn dec_correctly_sets_flags() {
+    let mut cpu = Cpu::new();
+    let mut memory = Memory::new();
+
+    cpu.set_flag(true, CARRY_FLAG_MASK);
+
+    memory.write_byte(0, 15);
+    cpu.load_immediate(Reg::A, &memory);
+
+    memory.write_byte(1, 1);
+    cpu.load_immediate(Reg::B, &memory);
+
+    memory.write_byte(2, 0x05);
+    cpu.step(&mut memory).unwrap();
+
+    assert_eq!(cpu.b, 0);
+    assert!(!cpu.halfcarry_flag());
+    assert!(cpu.zero_flag());
+    assert!(cpu.carry_flag());
+
+    memory.write_byte(3, 0x3D);
+    cpu.step(&mut memory).unwrap();
+    assert_eq!(cpu.a, 14);
+    assert!(!cpu.halfcarry_flag());
+    assert!(!cpu.zero_flag());
+    assert!(cpu.carry_flag());
+
+    memory.write_byte(4, 0);
+    cpu.load_immediate(Reg::A, &memory);
+
+    memory.write_byte(5, 0);
+    cpu.load_immediate(Reg::B, &memory);
+
+    memory.write_byte(6, 0x3D);
+    cpu.step(&mut memory).unwrap();
+
+    assert_eq!(cpu.a, 255);
+    assert_eq!(cpu.b, 0);
+    assert!(!cpu.zero_flag());
+    assert!(cpu.carry_flag());
+    assert!(cpu.subtract_flag());
+    assert!(cpu.halfcarry_flag());
+
+    memory.write_byte(7, 6);
+    cpu.load_immediate(Reg::A, &memory);
+
+    memory.write_byte(8, 4);
+    cpu.load_immediate(Reg::B, &memory);
+
+    memory.write_byte(9, 0x3D);
+    cpu.step(&mut memory).unwrap();
+
+    assert_eq!(cpu.a, 5);
+    assert_eq!(cpu.b, 4);
+    assert!(!cpu.halfcarry_flag());
+    assert!(!cpu.zero_flag());
+    assert!(cpu.carry_flag());
+}
+
+#[test]
+fn inc_hl_works() {
+    let mut cpu = Cpu::new();
+    let mut memory = Memory::new();
+
+    cpu.set_hl(0x1234);
+    cpu.set_flag(true, CARRY_FLAG_MASK);
+    memory.write_byte(0x1234, 0x0F);
+
+    memory.write_byte(0, 0x34);
+    cpu.step(&mut memory).unwrap();
+
+    assert_eq!(memory.read_byte(0x1234), 0x10);
+    assert!(cpu.halfcarry_flag());
+    assert!(!cpu.zero_flag());
+    assert!(!cpu.subtract_flag());
+    assert!(cpu.carry_flag());
+    assert_eq!(cpu.pc, 1);
+    assert_eq!(cpu.hl(), 0x1234);
+
+    memory.write_byte(0x1234, 0x06);
+    memory.write_byte(1, 0x34);
+    cpu.step(&mut memory).unwrap();
+
+    assert_eq!(memory.read_byte(0x1234), 0x07);
+    assert!(!cpu.halfcarry_flag());
+    assert!(!cpu.zero_flag());
+    assert!(!cpu.subtract_flag());
+    assert!(cpu.carry_flag());
+    assert_eq!(cpu.pc, 2);
+    assert_eq!(cpu.hl(), 0x1234);
+}
+
+#[test]
+fn dec_hl_works() {
+    let mut cpu = Cpu::new();
+    let mut memory = Memory::new();
+
+    cpu.set_hl(0x1234);
+    cpu.set_flag(true, CARRY_FLAG_MASK);
+    memory.write_byte(0x1234, 0x10);
+
+    memory.write_byte(0, 0x35);
+    cpu.step(&mut memory).unwrap();
+
+    assert_eq!(memory.read_byte(0x1234), 0x0F);
+    assert!(cpu.halfcarry_flag());
+    assert!(!cpu.zero_flag());
+    assert!(cpu.subtract_flag());
+    assert!(cpu.carry_flag());
+    assert_eq!(cpu.pc, 1);
+    assert_eq!(cpu.hl(), 0x1234);
+
+    memory.write_byte(0x1234, 0x06);
+    memory.write_byte(1, 0x35);
+    cpu.step(&mut memory).unwrap();
+
+    assert_eq!(memory.read_byte(0x1234), 0x05);
+    assert!(!cpu.halfcarry_flag());
+    assert!(!cpu.zero_flag());
+    assert!(cpu.subtract_flag());
+    assert!(cpu.carry_flag());
+    assert_eq!(cpu.pc, 2);
+    assert_eq!(cpu.hl(), 0x1234);
+}
+
+#[test]
+fn stop_consumes_padding_and_stays_stopped() {
+    let mut cpu = Cpu::new();
+    let mut memory = Memory::new();
+
+    memory.write_byte(0, 0x10);
+    memory.write_byte(1, 0x00);
+    cpu.step(&mut memory).unwrap();
+
+    assert!(cpu.stopped);
+    assert_eq!(cpu.pc, 2);
+
+    memory.write_byte(2, 0x3E);
+    memory.write_byte(3, 77);
+
+    cpu.step(&mut memory).unwrap();
+    assert_eq!(cpu.pc, 2);
+    assert_eq!(cpu.a, 0);
+}
