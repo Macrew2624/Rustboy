@@ -33,7 +33,7 @@ use common::start_cpu;
 
 #[test]
 fn ld_rd_rs() {
-    let start = common::start_cpu();
+    let start = start_cpu();
     let mem_start = Memory::new();
 
     let mut failed = Vec::new();
@@ -68,7 +68,7 @@ fn ld_rd_rs() {
 
 #[test]
 fn ld_hl_r() {
-    let cpu_start = common::start_cpu();
+    let cpu_start = start_cpu();
     let mem_start = Memory::new();
 
     let mut failed = Vec::new();
@@ -99,7 +99,7 @@ fn ld_hl_r() {
 
 #[test]
 fn ld_r_hl() {
-    let cpu_start = common::start_cpu();
+    let cpu_start = start_cpu();
     let mem_start = Memory::new();
 
     let mut failed = Vec::new();
@@ -133,10 +133,11 @@ fn ld_r_hl() {
 
 #[test]
 fn ld_r_u8() {
-    let cpu_start = common::start_cpu();
+    let cpu_start = start_cpu();
     let mem_start = Memory::new();
 
     let mut failed = Vec::new();
+    let mut counter = 0;
     for opcode in 0x06..=0x3E {
         if opcode & LAST_THREE_BITS_MASK == 0b110 && (opcode >> 3) & LAST_THREE_BITS_MASK != 0b110 {
             let mut cpu = cpu_start.clone();
@@ -158,13 +159,31 @@ fn ld_r_u8() {
             if cpu != cpu_expected || memory != mem_expected {
                 failed.push(opcode);
             }
+            counter += 1;
         }
     }
 
+    assert_eq!(counter, 7);
     assert!(failed.is_empty(), "failed opcodes: {:x?}", failed);
 }
 
 #[test]
 fn ld_hl_u8() {
-    let cpu_start = start_cpu();
+    let mut cpu = start_cpu();
+    let mut cpu_expected = start_cpu();
+
+    let mut memory = Memory::new();
+    let mut mem_expected = Memory::new();
+
+    memory.write_byte(0, 0x36);
+    mem_expected.write_byte(0, 0x36);
+    memory.write_byte(1, 0x12);
+    mem_expected.write_byte(1, 0x12);
+
+    cpu.step(&mut memory).unwrap();
+    mem_expected.write_byte(cpu_expected.hl(), 0x12);
+    cpu_expected.pc += 2;
+
+    assert!(cpu == cpu_expected);
+    assert!(memory == mem_expected);
 }
