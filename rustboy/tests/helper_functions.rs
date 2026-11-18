@@ -1,15 +1,8 @@
-/*
-    Test every possible helper function
-    Verify it functions how it's supposed to.
-    Veirfy it doesn't tamper with anything else.
-    Functions to test:
-    Free function
-        reg_from_bits
-*/
-
 use rustboy::{
     CARRY_FLAG_MASK, Cpu, HALFCARRY_FLAG_MASK, Memory, Reg, SUBTRACT_FLAG_MASK, ZERO_FLAG_MASK,
+    reg_from_bits,
 };
+mod common;
 
 #[test]
 fn cpu_new() {
@@ -99,20 +92,7 @@ fn cpu_subtract_flag() {
 
 #[test]
 fn cpu_get_reg() {
-    let cpu = Cpu {
-        pc: 0,
-        sp: 0,
-        a: 1,
-        b: 2,
-        c: 3,
-        d: 4,
-        e: 5,
-        h: 6,
-        l: 7,
-        f: 0,
-        halted: false,
-        stopped: false,
-    };
+    let cpu = common::start_cpu();
 
     assert_eq!(cpu.get_reg(Reg::A), 1);
     assert_eq!(cpu.get_reg(Reg::B), 2);
@@ -182,20 +162,7 @@ fn cpu_hl() {
 
 #[test]
 fn cpu_set_hl() {
-    let start = Cpu {
-        pc: 99,
-        sp: 66,
-        a: 1,
-        b: 2,
-        c: 3,
-        d: 4,
-        e: 5,
-        h: 6,
-        l: 7,
-        f: 8,
-        halted: false,
-        stopped: false,
-    };
+    let start = common::start_cpu();
     let mut expected = start.clone();
     let mut cpu = start.clone();
 
@@ -218,21 +185,8 @@ fn cpu_set_hl() {
 
 #[test]
 fn cpu_set_flag() {
-    let start = Cpu {
-        pc: 99,
-        sp: 66,
-        a: 1,
-        b: 2,
-        c: 3,
-        d: 4,
-        e: 5,
-        h: 6,
-        l: 7,
-        f: 0x0F,
-        halted: false,
-        stopped: false,
-    };
-
+    let mut start = common::start_cpu();
+    start.f = 0x0F;
     let mut cpu = start.clone();
     let mut expected = start.clone();
 
@@ -327,20 +281,7 @@ fn cpu_set_flag() {
 
 #[test]
 fn cpu_fetch_byte() {
-    let start = Cpu {
-        pc: 0,
-        sp: 66,
-        a: 1,
-        b: 2,
-        c: 3,
-        d: 4,
-        e: 5,
-        h: 6,
-        l: 7,
-        f: 8,
-        halted: false,
-        stopped: false,
-    };
+    let start = common::start_cpu();
 
     let mut cpu = start.clone();
     let mut expected = start.clone();
@@ -389,20 +330,7 @@ fn cpu_fetch_byte() {
 
 #[test]
 fn cpu_load_immediate() {
-    let start = Cpu {
-        pc: 0,
-        sp: 66,
-        a: 11,
-        b: 12,
-        c: 13,
-        d: 14,
-        e: 15,
-        h: 16,
-        l: 17,
-        f: 0xF0,
-        halted: false,
-        stopped: false,
-    };
+    let start = common::start_cpu();
     let mut memory = Memory::new();
 
     const ALL_REGS: [Reg; 7] = [Reg::A, Reg::B, Reg::C, Reg::D, Reg::E, Reg::H, Reg::L];
@@ -437,20 +365,7 @@ fn cpu_load_immediate() {
 
 #[test]
 fn cpu_load_reg() {
-    let start = Cpu {
-        pc: 0,
-        sp: 66,
-        a: 11,
-        b: 12,
-        c: 13,
-        d: 14,
-        e: 15,
-        h: 16,
-        l: 17,
-        f: 0xF0,
-        halted: false,
-        stopped: false,
-    };
+    let start = common::start_cpu();
 
     const ALL_REGS: [Reg; 7] = [Reg::A, Reg::B, Reg::C, Reg::D, Reg::E, Reg::H, Reg::L];
 
@@ -474,7 +389,22 @@ fn cpu_load_reg() {
 }
 
 #[test]
-fn reg_from_bits() {}
+fn helper_reg_from_bits() {
+    for index in 0..=255 {
+        let value = index as u8;
+        match value {
+            0 => assert_eq!(reg_from_bits(value).unwrap(), Reg::B),
+            1 => assert_eq!(reg_from_bits(value).unwrap(), Reg::C),
+            2 => assert_eq!(reg_from_bits(value).unwrap(), Reg::D),
+            3 => assert_eq!(reg_from_bits(value).unwrap(), Reg::E),
+            4 => assert_eq!(reg_from_bits(value).unwrap(), Reg::H),
+            5 => assert_eq!(reg_from_bits(value).unwrap(), Reg::L),
+            6 => assert!(reg_from_bits(value).is_err()),
+            7 => assert_eq!(reg_from_bits(value).unwrap(), Reg::A),
+            _ => assert!(reg_from_bits(value).is_err()),
+        }
+    }
+}
 
 #[test]
 fn memory_new() {

@@ -20,7 +20,7 @@ pub const HALFCARRY_FLAG_MASK: u8 = 0b00100000;
 pub const CARRY_FLAG_MASK: u8 = 0b00010000;
 pub const LAST_THREE_BITS_MASK: u8 = 0b00000111;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Reg {
     A,
     B,
