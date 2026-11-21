@@ -26,164 +26,213 @@
     0xF9 LD SP, HL
     0xFA LD A, (u16)
 */
-use rustboy::{LAST_THREE_BITS_MASK, Memory, reg_from_bits};
-
 mod common;
 use common::start_cpu;
+use rustboy::{LAST_THREE_BITS_MASK, Memory, reg_from_bits};
 
 #[test]
 fn ld_rd_rs() {
-    let start = start_cpu();
-    let mem_start = Memory::new();
-
+    // initialize a vector to store failed function calls
     let mut failed = Vec::new();
-    let mut counter = 0;
-    for opcode in 0x40..=0x7F {
-        if opcode & LAST_THREE_BITS_MASK != 0b110 && !(0x70..=0x77).contains(&opcode) {
-            let mut cpu = start.clone();
-            let mut memory = mem_start.clone();
-            let mut cpu_expected = start.clone();
-            let mut mem_expected = mem_start.clone();
-            cpu_expected.pc += 1;
 
+    // initialize a vector to count how many operations happened
+    let mut counter = 0;
+
+    // iterate through every opcode in range 0x40 to 0x7F
+    for opcode in 0x40..=0x7F {
+        // exclude operations to/from (HL)
+        if opcode & LAST_THREE_BITS_MASK != 0b110 && !(0x70..=0x77).contains(&opcode) {
+            // initialize a new cpu and memory every iteration
+            let mut cpu = start_cpu();
+            let mut cpu_expected = start_cpu();
+            let mut memory = Memory::new();
+            let mut mem_expected = Memory::new();
+
+            // prepare the memory to execute the opcode
+            mem_expected.write_byte(0, opcode);
+            memory.write_byte(0, opcode);
+
+            // load the src's register's value into the dst register
+            cpu.step(&mut memory).unwrap();
+
+            // compute the source and destination registers for the expected result
             let src = reg_from_bits(opcode & rustboy::LAST_THREE_BITS_MASK).unwrap();
             let dst = reg_from_bits((opcode >> 3) & rustboy::LAST_THREE_BITS_MASK).unwrap();
 
+            //simulate the same load
             cpu_expected.set_reg(dst, cpu_expected.get_reg(src));
+            cpu_expected.pc += 1;
 
-            mem_expected.write_byte(0, opcode);
-            memory.write_byte(0, opcode);
-            cpu.step(&mut memory).unwrap();
-
+            // verify that nothing else changed
             if cpu != cpu_expected || memory != mem_expected {
                 failed.push(opcode);
             }
+
+            // increase the number of operations that happened
             counter += 1;
         }
     }
 
+    // verify that the correct number of opcodes were excluded
     assert_eq!(counter, 49);
+
+    //verify that all operations completed successfully
     assert!(failed.is_empty(), "failed opcodes: {:x?}", failed);
 }
 
 #[test]
 fn ld_hl_r() {
-    let cpu_start = start_cpu();
-    let mem_start = Memory::new();
-
+    // initialize a vector to store failed function calls
     let mut failed = Vec::new();
-    for opcode in 0x70..=0x77 {
-        if opcode != 0x76 {
-            let mut cpu = cpu_start.clone();
-            let mut memory = mem_start.clone();
-            let mut cpu_expected = cpu_start.clone();
-            let mut mem_expected = mem_start.clone();
 
+    // iterate through every opcode in range 0x70 to 0x77
+    for opcode in 0x70..=0x77 {
+        // exclude HALT
+        if opcode != 0x76 {
+            // initialize a new cpu and memory each iteration
+            let mut cpu = start_cpu();
+            let mut cpu_expected = start_cpu();
+            let mut memory = Memory::new();
+            let mut mem_expected = Memory::new();
+
+            // prepare the memory to execute the opcode
+            memory.write_byte(0, opcode);
+
+            // load the src register's value into memory at adress (HL)
+            cpu.step(&mut memory).unwrap();
+
+            // compute the src register's value for the expected result
             let src = reg_from_bits(opcode & LAST_THREE_BITS_MASK).unwrap();
 
+            // execute the same load
             mem_expected.write_byte(0, opcode);
             mem_expected.write_byte(cpu_expected.hl(), cpu_expected.get_reg(src));
-
-            memory.write_byte(0, opcode);
-            cpu.step(&mut memory).unwrap();
             cpu_expected.pc += 1;
 
+            // verify that nothing else changed
             if cpu != cpu_expected || memory != mem_expected {
                 failed.push(opcode);
             }
         }
     }
 
+    // verify that every operation completed successfully
     assert!(failed.is_empty(), "failed opcodes: {:x?}", failed);
 }
 
 #[test]
 fn ld_r_hl() {
-    let cpu_start = start_cpu();
-    let mem_start = Memory::new();
-
+    // initialize a vector to store failed function calls
     let mut failed = Vec::new();
-    for opcode in 0x40..=0x7F {
+
+    // iterate through every opcode in range 0x46 to 0x7E
+    for opcode in 0x46..=0x7E {
+        // only include operations to (HL)
         if opcode & LAST_THREE_BITS_MASK == 0b110 && (opcode >> 3) & LAST_THREE_BITS_MASK != 0b110 {
-            let mut cpu = cpu_start.clone();
-            let mut memory = mem_start.clone();
-            let mut cpu_expected = cpu_start.clone();
-            let mut mem_expected = mem_start.clone();
+            // initialize a new cpu and memory for every iteration
+            let mut cpu = start_cpu();
+            let mut cpu_expected = start_cpu();
+            let mut memory = Memory::new();
+            let mut mem_expected = Memory::new();
 
+            // prepare the memory to execute the opcode and load value 0x12 into the register
+            memory.write_byte(0, opcode);
             memory.write_byte(cpu.hl(), 0x12);
-            mem_expected.write_byte(cpu_expected.hl(), 0x12);
 
+            // load the value from memory at adress (HL) into the dst register
+            cpu.step(&mut memory).unwrap();
+
+            // compute the dst register's value for the expected result
             let dst = reg_from_bits((opcode >> 3) & LAST_THREE_BITS_MASK).unwrap();
 
+            // recreate the same load
             mem_expected.write_byte(0, opcode);
+            mem_expected.write_byte(cpu_expected.hl(), 0x12);
             cpu_expected.set_reg(dst, 0x12);
-
-            memory.write_byte(0, opcode);
-            cpu.step(&mut memory).unwrap();
             cpu_expected.pc += 1;
 
+            // verify that nothing else was changed
             if cpu != cpu_expected || memory != mem_expected {
                 failed.push(opcode);
             }
         }
     }
 
+    // verify that every operation completed successfully
     assert!(failed.is_empty(), "failed opcodes: {:x?}", failed);
 }
 
 #[test]
 fn ld_r_u8() {
-    let cpu_start = start_cpu();
-    let mem_start = Memory::new();
-
+    // initialize a vector to store failed function calls
     let mut failed = Vec::new();
+
+    // initialize a vector to count how many operations happened
     let mut counter = 0;
+
+    // iterate through every opcode in range 0x06 to 0x3E
     for opcode in 0x06..=0x3E {
+        // only include the LD r, u8 operations (excluding LD (HL), u8)
         if opcode & LAST_THREE_BITS_MASK == 0b110 && (opcode >> 3) & LAST_THREE_BITS_MASK != 0b110 {
-            let mut cpu = cpu_start.clone();
-            let mut memory = mem_start.clone();
-            let mut cpu_expected = cpu_start.clone();
-            let mut mem_expected = mem_start.clone();
+            // initialize a new cpu and memory for every iteration
+            let mut cpu = start_cpu();
+            let mut cpu_expected = start_cpu();
+            let mut memory = Memory::new();
+            let mut mem_expected = Memory::new();
 
+            // prepare the memory to execute the opcode and load the value 0x12
             memory.write_byte(0, opcode);
-            mem_expected.write_byte(0, opcode);
             memory.write_byte(1, 0x12);
-            mem_expected.write_byte(1, 0x12);
 
-            let dst = reg_from_bits((opcode >> 3) & LAST_THREE_BITS_MASK).unwrap();
-            cpu_expected.set_reg(dst, 0x12);
-
+            // load the value from memory into the dst register
             cpu.step(&mut memory).unwrap();
+
+            // compute the dst register for the expected value
+            let dst = reg_from_bits((opcode >> 3) & LAST_THREE_BITS_MASK).unwrap();
+
+            // recreate the same load
+            mem_expected.write_byte(0, opcode);
+            mem_expected.write_byte(1, 0x12);
+            cpu_expected.set_reg(dst, 0x12);
             cpu_expected.pc += 2;
 
+            // verify that nothing else changed
             if cpu != cpu_expected || memory != mem_expected {
                 failed.push(opcode);
             }
+
+            // increase the number of operations that executed
             counter += 1;
         }
     }
 
+    // verify that the correct number of operations were excluded
     assert_eq!(counter, 7);
+
+    // verify that every operation completed successfully
     assert!(failed.is_empty(), "failed opcodes: {:x?}", failed);
 }
 
 #[test]
 fn ld_hl_u8() {
+    // initialize a new cpu and memory
     let mut cpu = start_cpu();
     let mut cpu_expected = start_cpu();
-
     let mut memory = Memory::new();
     let mut mem_expected = Memory::new();
 
+    // prepare the memory to execute 0x36 (LD (HL), u8), and load value 0x12
     memory.write_byte(0, 0x36);
-    mem_expected.write_byte(0, 0x36);
     memory.write_byte(1, 0x12);
+    mem_expected.write_byte(0, 0x36);
     mem_expected.write_byte(1, 0x12);
 
+    // execute the operation, writing 0x12 at the adress (HL) in memory, increasing pc by 2
     cpu.step(&mut memory).unwrap();
     mem_expected.write_byte(cpu_expected.hl(), 0x12);
     cpu_expected.pc += 2;
 
-    assert!(cpu == cpu_expected);
-    assert!(memory == mem_expected);
+    // verify that nothing else was changed
+    assert_eq!(cpu, cpu_expected);
+    assert_eq!(memory, mem_expected);
 }

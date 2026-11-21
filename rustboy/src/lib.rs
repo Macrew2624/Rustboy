@@ -14,10 +14,13 @@ pub struct Cpu {
     pub stopped: bool, // determines if the cpu is stopped. wakes on input
 }
 
+// masks for setting the flags
 pub const ZERO_FLAG_MASK: u8 = 0b10000000;
 pub const SUBTRACT_FLAG_MASK: u8 = 0b01000000;
 pub const HALFCARRY_FLAG_MASK: u8 = 0b00100000;
 pub const CARRY_FLAG_MASK: u8 = 0b00010000;
+
+// mask for reading the last 3 bits
 pub const LAST_THREE_BITS_MASK: u8 = 0b00000111;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -32,6 +35,8 @@ pub enum Reg {
 }
 
 pub fn reg_from_bits(bits: u8) -> Result<Reg, String> {
+    // function that computes the register from an opcode's bits
+    // returns error if the bits don't represent a valid register
     match bits {
         0b000 => Ok(Reg::B),
         0b001 => Ok(Reg::C),
@@ -46,6 +51,7 @@ pub fn reg_from_bits(bits: u8) -> Result<Reg, String> {
 
 impl Cpu {
     pub fn new() -> Cpu {
+        // function that returns a new empty cpu
         Cpu {
             pc: 0,
             sp: 0,
@@ -63,18 +69,32 @@ impl Cpu {
     }
 
     pub fn zero_flag(&self) -> bool {
+        // function that returns the Zero Flag's value from the F register
         (self.f & ZERO_FLAG_MASK) > 0
     }
     pub fn subtract_flag(&self) -> bool {
+        // function that returns the Subtract Flag's value from the F register
         (self.f & SUBTRACT_FLAG_MASK) > 0
     }
     pub fn halfcarry_flag(&self) -> bool {
+        // function that returns the Half-Carry Flag's value from the F register
         (self.f & HALFCARRY_FLAG_MASK) > 0
     }
     pub fn carry_flag(&self) -> bool {
+        // function that returns the Carry Flag's value from the F register
         (self.f & CARRY_FLAG_MASK) > 0
     }
+    pub fn set_flag(&mut self, value: bool, mask: u8) {
+        // function that sets the value of a flag depending on the mask
+        if value {
+            self.f |= mask
+        } else {
+            self.f &= !mask
+        }
+    }
+
     pub fn get_reg(&self, reg: Reg) -> u8 {
+        // function that returns the value of a register
         match reg {
             Reg::A => self.a,
             Reg::B => self.b,
@@ -85,23 +105,8 @@ impl Cpu {
             Reg::L => self.l,
         }
     }
-
-    pub fn hl(&self) -> u16 {
-        return ((self.h as u16) << 8) | (self.l as u16);
-    }
-    pub fn set_hl(&mut self, value: u16) {
-        self.l = value as u8;
-        self.h = (value >> 8) as u8;
-    }
-
-    pub fn set_flag(&mut self, value: bool, mask: u8) {
-        if value {
-            self.f |= mask
-        } else {
-            self.f &= !mask
-        }
-    }
     pub fn set_reg(&mut self, reg: Reg, value: u8) {
+        // function that sets the value of a register
         match reg {
             Reg::A => self.a = value,
             Reg::B => self.b = value,
@@ -113,76 +118,99 @@ impl Cpu {
         }
     }
 
+    pub fn hl(&self) -> u16 {
+        // function that returns the value of HL
+        ((self.h as u16) << 8) | (self.l as u16)
+    }
+    pub fn set_hl(&mut self, value: u16) {
+        // function that sets the value of HL
+        self.l = value as u8;
+        self.h = (value >> 8) as u8;
+    }
+
     pub fn fetch_byte(&mut self, memory: &Memory) -> u8 {
+        // function that returns from memory the value at adress pc
         let fetched = memory.read_byte(self.pc);
         self.pc = self.pc.wrapping_add(1);
         fetched
     }
     pub fn load_immediate(&mut self, reg: Reg, memory: &Memory) {
+        // function that sets a register to the value at adress pc from memory
         let value = self.fetch_byte(memory);
         self.set_reg(reg, value);
     }
     pub fn load_reg(&mut self, dest: Reg, src: Reg) {
+        // function that set's dest to src's value
         self.set_reg(dest, self.get_reg(src));
     }
 
     pub fn add_to_reg(&mut self, reg: Reg, operand: u8) {
+        // function that increases reg's value by operand
         let register = self.get_reg(reg);
         let (result, did_overflow) = register.overflowing_add(operand);
 
+        self.set_reg(reg, result);
+
+        // set flags
         let half_carry_check = (register & 0x0F) + (operand & 0x0F);
         self.set_flag((half_carry_check >> 4) > 0, HALFCARRY_FLAG_MASK);
-
-        self.set_reg(reg, result);
         self.set_flag(did_overflow, CARRY_FLAG_MASK);
         self.set_flag(result == 0, ZERO_FLAG_MASK);
         self.set_flag(false, SUBTRACT_FLAG_MASK);
     }
     pub fn inc_reg(&mut self, reg: Reg) {
+        // function that increases reg's value by 1
         let register = self.get_reg(reg);
         let result = self.inc_value(register);
         self.set_reg(reg, result);
     }
     pub fn dec_reg(&mut self, reg: Reg) {
+        // function that decreases reg's value by 1
         let register = self.get_reg(reg);
         let result = self.dec_value(register);
         self.set_reg(reg, result);
     }
 
     pub fn inc_value(&mut self, value: u8) -> u8 {
+        // function that increases a value by 1
         let (result, _) = value.overflowing_add(1);
 
+        // set flags
         let half_carry_check = (value & 0x0F) + 1;
         self.set_flag((half_carry_check >> 4) > 0, HALFCARRY_FLAG_MASK);
-
         self.set_flag(result == 0, ZERO_FLAG_MASK);
         self.set_flag(false, SUBTRACT_FLAG_MASK);
 
-        return result;
+        result
     }
     pub fn dec_value(&mut self, value: u8) -> u8 {
+        // function that decreases a value by 1
         let (result, _) = value.overflowing_sub(1);
 
+        // set f
         self.set_flag(value & 0x0F == 0, HALFCARRY_FLAG_MASK);
-
         self.set_flag(result == 0, ZERO_FLAG_MASK);
         self.set_flag(true, SUBTRACT_FLAG_MASK);
 
-        return result;
+        result
     }
 
     pub fn step(&mut self, memory: &mut Memory) -> Result<(), String> {
+        // function that executes opcodes read from memory
         let interrupt_flag = memory.read_byte(0xFF0F);
         let interrupt_enable = memory.read_byte(0xFFFF);
+
         if (interrupt_enable & interrupt_flag) & 0b00011111 != 0 {
             self.halted = false;
         }
         if (interrupt_enable & interrupt_flag) & 0b00010000 != 0 {
             self.stopped = false;
         }
+
         if self.halted || self.stopped {
             return Ok(());
         }
+
         let instruction_start = self.pc;
         let opcode = self.fetch_byte(memory);
         match opcode {
@@ -255,8 +283,8 @@ impl Cpu {
             }
             0x40..=0x7F => {
                 // LD rd, rs - load register rs's value into register rd depending on the digits of the opcode
-                // first, it checks the last 3 bits of the opcode to determine the source
-                // then, the opcode is shifted to the right by 3 and then it check the last 3 bits again to determine the destination
+                // first, it checks the last 3 bits of the opcode to determine the source then, the opcode is shifted to
+                // the right by 3 and then it check the last 3 bits again to determine the destination
                 // 000 -> B; 001 -> C; 010 -> D; 011 -> E; 100 -> H; 101 -> L; 110 -> HL (handled above); 111 -> A;
                 let source_reg = reg_from_bits(opcode & LAST_THREE_BITS_MASK)
                     .map_err(|e| format!("{} Instruction start: {:#06x}.", e, instruction_start))?;
@@ -295,14 +323,17 @@ pub struct Memory {
 
 impl Memory {
     pub fn new() -> Memory {
+        // function that returns a new empty Memory object
         Memory { ram: [0; 1 << 16] }
     }
 
     pub fn read_byte(&self, address: u16) -> u8 {
+        // function that returns the value located at adress from memory
         self.ram[address as usize]
     }
 
     pub fn write_byte(&mut self, address: u16, value: u8) {
+        // function that sets the value located at adress in memory
         self.ram[address as usize] = value
     }
 }

@@ -1,6 +1,7 @@
 use rustboy::Cpu;
 
 pub fn start_cpu() -> Cpu {
+    // function that returns a new Cpu object with the registers already set to distinct non-zero values
     Cpu {
         pc: 0,
         sp: 8,
